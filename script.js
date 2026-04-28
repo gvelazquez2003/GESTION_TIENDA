@@ -8,14 +8,21 @@ const state = {
   products: [],
   motivosSalida: [],
   activeModule: 'Inventario Inicial',
+  items: [],
 };
 
 const elements = {
   envWarning: document.getElementById('env-warning'),
   form: document.getElementById('inventory-form'),
   submitButton: null,
-  productoInput: document.getElementById('producto'),
+  fechaDisplay: document.getElementById('fecha-display'),
   productosList: document.getElementById('listaProductos'),
+  lineProducto: document.getElementById('line-producto'),
+  lineCantidad: document.getElementById('line-cantidad'),
+  addItemBtn: document.getElementById('add-item'),
+  itemsBody: document.getElementById('items-body'),
+  itemsWrap: document.getElementById('items-wrap'),
+  itemsEmpty: document.getElementById('items-empty'),
   motivoBox: document.getElementById('contenedor-motivo'),
   motivoSelect: document.getElementById('motivo'),
   motivoOtroInput: document.getElementById('motivo-otro'),
@@ -37,8 +44,9 @@ init();
 function init() {
   setupModuleButtons();
   setupMotivoField();
+  setupItems();
   setupForm();
-  setTodayOnDate();
+  startDateClock();
   toggleEnvWarning(!APPS_SCRIPT_URL);
   fetchCatalogs();
 }
@@ -56,6 +64,7 @@ function setupModuleButtons() {
 
       state.activeModule = moduleName;
       setActiveButton(buttonId);
+      clearItems();
 
       if (moduleName === 'Salidas') {
         showMotivoBox();
@@ -86,6 +95,71 @@ function setupMotivoField() {
   });
 }
 
+function setupItems() {
+  elements.addItemBtn?.addEventListener('click', addItem);
+
+  elements.itemsBody?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-remove-item]');
+    if (!button) return;
+    const itemId = String(button.dataset.removeItem || '');
+    state.items = state.items.filter((item) => item.id !== itemId);
+    renderItems();
+  });
+}
+
+function addItem() {
+  const parsedProduct = resolveProduct(elements.lineProducto?.value);
+  if (!parsedProduct) {
+    showToast('Selecciona un producto valido del catalogo.', 'error');
+    return;
+  }
+
+  const quantity = Number(elements.lineCantidad?.value || '');
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    showToast('La cantidad debe ser un numero entero mayor a cero.', 'error');
+    return;
+  }
+
+  state.items.push({
+    id: createLineItemId(),
+    codigo: parsedProduct.codigo,
+    producto: parsedProduct.producto,
+    cantidad: quantity,
+  });
+
+  renderItems();
+  if (elements.lineProducto) elements.lineProducto.value = '';
+  if (elements.lineCantidad) elements.lineCantidad.value = '';
+}
+
+function renderItems() {
+  if (!elements.itemsBody || !elements.itemsWrap || !elements.itemsEmpty) return;
+
+  if (!state.items.length) {
+    elements.itemsBody.innerHTML = '';
+    elements.itemsWrap.classList.add('hidden');
+    elements.itemsEmpty.classList.remove('hidden');
+    return;
+  }
+
+  elements.itemsBody.innerHTML = state.items.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.codigo)}</td>
+      <td>${escapeHtml(item.producto)}</td>
+      <td>${escapeHtml(item.cantidad)}</td>
+      <td><button type="button" class="btn btn--small" data-remove-item="${escapeHtml(item.id)}">Quitar</button></td>
+    </tr>
+  `).join('');
+
+  elements.itemsWrap.classList.remove('hidden');
+  elements.itemsEmpty.classList.add('hidden');
+}
+
+function clearItems() {
+  state.items = [];
+  renderItems();
+}
+
 function setupForm() {
   if (!elements.form) return;
 
@@ -97,19 +171,12 @@ function setupForm() {
       return;
     }
 
+    if (!state.items.length) {
+      showToast('Agrega al menos un producto al registro.', 'error');
+      return;
+    }
+
     const formData = new FormData(elements.form);
-    const parsedProduct = resolveProduct(formData.get('producto'));
-    if (!parsedProduct) {
-      showToast('Selecciona un producto valido del catalogo.', 'error');
-      return;
-    }
-
-    const quantity = Number(formData.get('cantidad'));
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      showToast('La cantidad debe ser un numero entero mayor a cero.', 'error');
-      return;
-    }
-
     const motivoSalida = resolveMotivoSalida(formData);
     if (state.activeModule === 'Salidas' && !motivoSalida) {
       showToast('Selecciona un motivo de salida.', 'error');
@@ -119,17 +186,17 @@ function setupForm() {
     const payload = {
       hoja_destino: mapSheetName(state.activeModule),
       tipo_movimiento: state.activeModule,
-      fecha: String(formData.get('fecha') || '').trim(),
-      codigo: parsedProduct.codigo,
-      producto: parsedProduct.producto,
-      cantidad: quantity,
       sede: String(formData.get('sede') || '').trim(),
       responsable: String(formData.get('responsable') || '').trim(),
       observaciones: String(formData.get('observaciones') || '').trim(),
       motivo_salida: motivoSalida,
+      items: state.items.map((item) => ({
+        codigo: item.codigo,
+        cantidad: item.cantidad,
+      })),
     };
 
-    if (!payload.fecha || !payload.sede || !payload.responsable) {
+    if (!payload.sede || !payload.responsable) {
       showToast('Completa los campos obligatorios.', 'error');
       return;
     }
@@ -141,9 +208,10 @@ function setupForm() {
       if (!result || result.success === false) {
         throw new Error(result?.message || 'No se pudo guardar el registro.');
       }
+
       showToast('Registro guardado correctamente.', 'success');
       elements.form.reset();
-      setTodayOnDate();
+      clearItems();
       hideMotivoBox();
       state.activeModule = 'Inventario Inicial';
       setActiveButton('btn-inicial');
@@ -153,6 +221,7 @@ function setupForm() {
         elements.motivoOtroInput.classList.add('hidden');
         elements.motivoOtroInput.required = false;
       }
+      startDateClock();
     } catch (error) {
       showToast(error.message || 'No se pudo guardar el registro.', 'error');
     } finally {
@@ -207,12 +276,21 @@ function toggleEnvWarning(show) {
   elements.envWarning.classList.toggle('hidden', !show);
 }
 
-function setTodayOnDate() {
-  const dateInput = elements.form?.querySelector('input[name="fecha"]');
-  if (!dateInput) return;
+function startDateClock() {
+  updateDateDisplay();
+  window.clearInterval(startDateClock.timer);
+  startDateClock.timer = window.setInterval(updateDateDisplay, 30000);
+}
+
+function updateDateDisplay() {
+  if (!elements.fechaDisplay) return;
   const now = new Date();
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-  dateInput.value = local.toISOString().slice(0, 10);
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = String(now.getFullYear()).slice(-2);
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  elements.fechaDisplay.value = `${day}/${month}/${year} ${hours}:${minutes}`;
 }
 
 async function fetchCatalogs() {
@@ -258,7 +336,7 @@ function renderMotivosOptions() {
 
 async function postData(payload) {
   if (!APPS_SCRIPT_URL) {
-    throw new Error('Configura la URL del Apps Script en el archivo script.js.');
+    throw new Error('Configura la URL del Apps Script en config.js.');
   }
 
   const response = await fetch(`${APPS_SCRIPT_PROXY_URL}?target=${encodeURIComponent(APPS_SCRIPT_URL)}`, {
@@ -315,6 +393,10 @@ function showToast(message, type) {
   }, 3200);
 }
 
+function createLineItemId() {
+  return `itm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
@@ -330,9 +412,4 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
-}
-
-function normalizeNetworkError(error) {
-  if (error instanceof Error) return error;
-  return new Error(String(error || 'Error de red.'));
 }

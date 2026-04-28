@@ -54,40 +54,50 @@ function doPost(e) {
 
 function guardarRegistro_(payload) {
   const data = payload || {};
-  validateRequired_(data, ['hoja_destino', 'fecha', 'codigo', 'producto', 'cantidad', 'sede', 'responsable']);
+  validateRequired_(data, ['hoja_destino', 'sede', 'responsable']);
 
   const sheetName = resolveSheetName_(data.hoja_destino);
   const sheet = getOrCreateSheet_(sheetName);
   const headers = sheetName === CONFIG.sheetNames.salidas ? CONFIG.headers.salidas : CONFIG.headers.base;
   ensureHeaders_(sheet, headers);
 
-  const catalogProduct = findProductByCode_(data.codigo);
-  if (!catalogProduct) {
-    throw new Error('El codigo no existe en la hoja PRODUCTOS.');
+  const items = normalizeItems_(data);
+  if (!items.length) {
+    throw new Error('Debes incluir al menos un producto con cantidad.');
   }
 
-  const cantidad = Number(data.cantidad);
-  if (!Number.isInteger(cantidad) || cantidad <= 0) {
-    throw new Error('La cantidad debe ser un numero entero mayor a cero.');
-  }
-
-  const fecha = String(data.fecha || '').trim();
-  const codigo = String(catalogProduct.codigo || data.codigo || '').trim();
-  const producto = String(catalogProduct.producto || data.producto || '').trim();
+  const fecha = buildTimestamp_();
   const sede = String(data.sede || '').trim();
   const responsable = String(data.responsable || '').trim();
   const observaciones = String(data.observaciones || '').trim();
 
-  const row = sheetName === CONFIG.sheetNames.salidas
-    ? [fecha, codigo, producto, cantidad, sede, responsable, observaciones, resolveMotivoSalida_(data.motivo_salida)]
-    : [fecha, codigo, producto, cantidad, sede, responsable, observaciones];
+  const motivo = sheetName === CONFIG.sheetNames.salidas ? resolveMotivoSalida_(data.motivo_salida) : '';
+  const rows = items.map((item, index) => {
+    const catalogProduct = findProductByCode_(item.codigo);
+    if (!catalogProduct) {
+      throw new Error('El codigo del item ' + (index + 1) + ' no existe en la hoja PRODUCTOS.');
+    }
 
-  sheet.appendRow(row);
+    const cantidad = Number(item.cantidad);
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      throw new Error('La cantidad del item ' + (index + 1) + ' debe ser un numero entero mayor a cero.');
+    }
+
+    if (sheetName === CONFIG.sheetNames.salidas) {
+      return [fecha, catalogProduct.codigo, catalogProduct.producto, cantidad, sede, responsable, observaciones, motivo];
+    }
+
+    return [fecha, catalogProduct.codigo, catalogProduct.producto, cantidad, sede, responsable, observaciones];
+  });
+
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
 
   return {
     sheet: sheetName,
-    rowInserted: sheet.getLastRow(),
-    values: row,
+    rowInserted: startRow + rows.length - 1,
+    rowsInserted: rows.length,
+    values: rows,
   };
 }
 
@@ -131,6 +141,24 @@ function readMotivosSalida_() {
 function findProductByCode_(rawCode) {
   const normalizedCode = normalizeText_(rawCode);
   return readProducts_().find((item) => normalizeText_(item.codigo) === normalizedCode) || null;
+}
+
+function normalizeItems_(data) {
+  if (Array.isArray(data.items)) {
+    return data.items.map((item) => ({
+      codigo: String(item?.codigo || '').trim(),
+      cantidad: item?.cantidad,
+    })).filter((item) => item.codigo !== '');
+  }
+
+  if (data.codigo || data.cantidad) {
+    return [{
+      codigo: String(data.codigo || '').trim(),
+      cantidad: data.cantidad,
+    }];
+  }
+
+  return [];
 }
 
 function resolveSheetName_(rawName) {
@@ -246,4 +274,8 @@ function normalizeText_(value) {
 
 function normalizeError_(error) {
   return String(error && error.message ? error.message : error || 'Error interno de Apps Script.');
+}
+
+function buildTimestamp_() {
+  return Utilities.formatDate(new Date(), CONFIG.timeZone, 'dd/MM/yy HH:mm');
 }

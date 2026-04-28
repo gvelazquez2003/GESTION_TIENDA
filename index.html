@@ -39,14 +39,8 @@
         <form id="inventory-form" class="store-form">
           <div class="form-grid">
             <label>
-              <span>Fecha</span>
-              <input type="date" name="fecha" required />
-            </label>
-
-            <label>
-              <span>Producto</span>
-              <input id="producto" name="producto" list="listaProductos" placeholder="Busca por codigo o nombre" autocomplete="off" required />
-              <datalist id="listaProductos"></datalist>
+              <span>Fecha y hora de registro</span>
+              <input type="text" id="fecha-display" readonly />
             </label>
 
             <label>
@@ -60,14 +54,43 @@
             </label>
 
             <label>
-              <span>Cantidad</span>
-              <input type="number" name="cantidad" min="1" step="1" placeholder="0" required />
-            </label>
-
-            <label>
               <span>Observaciones (Opcional)</span>
               <input type="text" name="observaciones" placeholder="Ej: Lote de la mañana" />
             </label>
+          </div>
+
+          <div class="items-card">
+            <h3>Productos del registro</h3>
+            <div class="line-grid">
+              <label>
+                <span>Producto</span>
+                <input id="line-producto" type="text" list="listaProductos" placeholder="Busca por codigo o nombre" autocomplete="off" />
+                <datalist id="listaProductos"></datalist>
+              </label>
+
+              <label>
+                <span>Cantidad</span>
+                <input id="line-cantidad" type="number" min="1" step="1" placeholder="0" />
+              </label>
+
+              <button id="add-item" type="button" class="btn">Agregar producto</button>
+            </div>
+
+            <p id="items-empty" class="items-empty">Todavia no agregaste productos al registro.</p>
+
+            <div id="items-wrap" class="items-table-wrap hidden">
+              <table class="items-table">
+                <thead>
+                  <tr>
+                    <th>Codigo</th>
+                    <th>Producto</th>
+                    <th>Cantidad</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="items-body"></tbody>
+              </table>
+            </div>
           </div>
 
           <div id="contenedor-motivo" class="motivo-box hidden">
