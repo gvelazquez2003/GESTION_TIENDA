@@ -80,6 +80,13 @@ p {
   font-weight: 500;
 }
 
+.module-title {
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
+  color: var(--pdt-tostado-oscuro);
+  font-weight: 700;
+}
+
 .main {
   width: min(980px, calc(100% - 2rem));
   margin: 0 auto 2rem;

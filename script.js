@@ -29,6 +29,7 @@ const elements = {
   toast: document.getElementById('toast'),
   standbyOverlay: document.getElementById('standby-overlay'),
   standbyMessage: document.getElementById('standby-message'),
+  moduleTitle: document.getElementById('module-title'),
   moduleButtons: {
     'btn-inicial': document.getElementById('btn-inicial'),
     'btn-recibido': document.getElementById('btn-recibido'),
@@ -49,6 +50,7 @@ function init() {
   startDateClock();
   toggleEnvWarning(!APPS_SCRIPT_URL);
   fetchCatalogs();
+  updateModuleTitle();
 }
 
 function setupModuleButtons() {
@@ -64,6 +66,7 @@ function setupModuleButtons() {
 
       state.activeModule = moduleName;
       setActiveButton(buttonId);
+      updateModuleTitle();
       clearItems();
 
       if (moduleName === 'Salidas') {
@@ -215,6 +218,7 @@ function setupForm() {
       hideMotivoBox();
       state.activeModule = 'Inventario Inicial';
       setActiveButton('btn-inicial');
+      updateModuleTitle();
       if (elements.motivoSelect) elements.motivoSelect.value = '';
       if (elements.motivoOtroInput) {
         elements.motivoOtroInput.value = '';
@@ -229,6 +233,12 @@ function setupForm() {
       toggleLoading(false, 'Guardar Registro');
     }
   });
+}
+
+function updateModuleTitle() {
+  const el = elements.moduleTitle;
+  if (!el) return;
+  el.textContent = `Módulo: ${state.activeModule || 'Inventario Inicial'}`;
 }
 
 function mapSheetName(moduleName) {
