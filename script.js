@@ -2,6 +2,7 @@
 
 const CURRENT_APPS_SCRIPT_URL = '';
 const APPS_SCRIPT_URL = String(window.APPS_SCRIPT_URL || CURRENT_APPS_SCRIPT_URL || '').trim();
+const APPS_SCRIPT_PROXY_URL = '/api/apps-script';
 
 const state = {
   products: [],
@@ -218,7 +219,9 @@ async function fetchCatalogs() {
   if (!APPS_SCRIPT_URL) return;
 
   try {
-    const response = await fetch(`${APPS_SCRIPT_URL}?action=getCatalogs`, { cache: 'no-store' });
+    const response = await fetch(`${APPS_SCRIPT_PROXY_URL}?target=${encodeURIComponent(APPS_SCRIPT_URL)}&action=getCatalogs`, {
+      cache: 'no-store',
+    });
     const data = await readJsonResponse(response);
     if (!data.success) {
       throw new Error(data.message || 'No se pudieron cargar los catalogos.');
@@ -258,7 +261,7 @@ async function postData(payload) {
     throw new Error('Configura la URL del Apps Script en el archivo script.js.');
   }
 
-  const response = await fetch(APPS_SCRIPT_URL, {
+  const response = await fetch(`${APPS_SCRIPT_PROXY_URL}?target=${encodeURIComponent(APPS_SCRIPT_URL)}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -8,6 +8,7 @@ Formulario web para registrar INVENTARIO INICIAL, RECIBIDO, SALIDAS e INVENTARIO
 - `styles.css`: estilos visuales
 - `script.js`: logica frontend y envio de datos
 - `Code.gs`: backend de Google Apps Script
+- `api/apps-script.js`: proxy serverless de Vercel para evitar problemas de CORS con Apps Script
 - `vercel.json`: configuracion de despliegue en Vercel
 
 ## Spreadsheet objetivo
@@ -64,6 +65,7 @@ Formulario web para registrar INVENTARIO INICIAL, RECIBIDO, SALIDAS e INVENTARIO
 4. Copiar la URL `/exec` del deploy.
 5. Pegar esa URL en `config.js` en la constante `window.APPS_SCRIPT_URL`.
 6. Importar esta carpeta en Vercel y publicar.
+7. El frontend ya llama al proxy `/api/apps-script`, no al Web App directamente.
 
 ## Notas
 
