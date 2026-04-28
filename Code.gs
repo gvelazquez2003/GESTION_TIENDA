@@ -1,0 +1,249 @@
+const CONFIG = {
+  spreadsheetId: '1AT5XYZieouHEW3JCJZgq4tLkS8xLUVEqqyInzpPFQlc',
+  timeZone: 'America/Caracas',
+  sheetNames: {
+    inventarioInicial: 'INVENTARIO INICIAL',
+    recibido: 'RECIBIDO',
+    salidas: 'SALIDAS',
+    inventarioCierre: 'INVENTARIO CIERRE',
+    productos: 'PRODUCTOS',
+    motivosSalida: 'MOTIVOS SALIDA',
+  },
+  headers: {
+    base: ['FECHA', 'CODIGO', 'PRODUCTO', 'CANTIDAD', 'SEDE', 'RESPONSABLE', 'OBSERVACIONES'],
+    salidas: ['FECHA', 'CODIGO', 'PRODUCTO', 'CANTIDAD', 'SEDE', 'RESPONSABLE', 'OBSERVACIONES', 'MOTIVO SALIDA'],
+  },
+};
+
+function doGet(e) {
+  const action = String(e?.parameter?.action || '').toLowerCase();
+
+  try {
+    if (action === 'getcatalogs') {
+      return jsonResponse_(true, getCatalogs_(), 'Catalogos sincronizados.');
+    }
+
+    if (!action || action === 'ping') {
+      return jsonResponse_(true, { ok: true }, 'Servicio disponible.');
+    }
+
+    return jsonResponse_(false, null, 'Accion GET no soportada.');
+  } catch (error) {
+    return jsonResponse_(false, null, normalizeError_(error));
+  }
+}
+
+function doPost(e) {
+  try {
+    const body = parseBody_(e);
+    const action = String(body.action || '').toLowerCase();
+
+    if (!action || action === 'guardarregistro' || action === 'saveregistro') {
+      return jsonResponse_(true, guardarRegistro_(body.payload || body), 'Registro guardado correctamente.');
+    }
+
+    if (body.payload || body.hoja_destino || body.codigo || body.producto) {
+      return jsonResponse_(true, guardarRegistro_(body.payload || body), 'Registro guardado correctamente.');
+    }
+
+    return jsonResponse_(false, null, 'Accion POST no soportada.');
+  } catch (error) {
+    return jsonResponse_(false, null, normalizeError_(error));
+  }
+}
+
+function guardarRegistro_(payload) {
+  const data = payload || {};
+  validateRequired_(data, ['hoja_destino', 'fecha', 'codigo', 'producto', 'cantidad', 'sede', 'responsable']);
+
+  const sheetName = resolveSheetName_(data.hoja_destino);
+  const sheet = getOrCreateSheet_(sheetName);
+  const headers = sheetName === CONFIG.sheetNames.salidas ? CONFIG.headers.salidas : CONFIG.headers.base;
+  ensureHeaders_(sheet, headers);
+
+  const catalogProduct = findProductByCode_(data.codigo);
+  if (!catalogProduct) {
+    throw new Error('El codigo no existe en la hoja PRODUCTOS.');
+  }
+
+  const cantidad = Number(data.cantidad);
+  if (!Number.isInteger(cantidad) || cantidad <= 0) {
+    throw new Error('La cantidad debe ser un numero entero mayor a cero.');
+  }
+
+  const fecha = String(data.fecha || '').trim();
+  const codigo = String(catalogProduct.codigo || data.codigo || '').trim();
+  const producto = String(catalogProduct.producto || data.producto || '').trim();
+  const sede = String(data.sede || '').trim();
+  const responsable = String(data.responsable || '').trim();
+  const observaciones = String(data.observaciones || '').trim();
+
+  const row = sheetName === CONFIG.sheetNames.salidas
+    ? [fecha, codigo, producto, cantidad, sede, responsable, observaciones, resolveMotivoSalida_(data.motivo_salida)]
+    : [fecha, codigo, producto, cantidad, sede, responsable, observaciones];
+
+  sheet.appendRow(row);
+
+  return {
+    sheet: sheetName,
+    rowInserted: sheet.getLastRow(),
+    values: row,
+  };
+}
+
+function getCatalogs_() {
+  return {
+    products: readProducts_(),
+    motivosSalida: readMotivosSalida_(),
+  };
+}
+
+function readProducts_() {
+  const sheet = getSpreadsheet_().getSheetByName(CONFIG.sheetNames.productos);
+  if (!sheet) {
+    throw new Error('No se encontro la hoja PRODUCTOS.');
+  }
+
+  const values = sheet.getDataRange().getValues();
+  return values
+    .slice(1)
+    .filter((row) => row[0] && row[1])
+    .map((row) => ({
+      codigo: String(row[0]).trim(),
+      producto: String(row[1]).trim(),
+      unidadPrimaria: String(row[2] || '').trim(),
+      familia: String(row[3] || '').trim(),
+    }));
+}
+
+function readMotivosSalida_() {
+  const sheet = getSpreadsheet_().getSheetByName(CONFIG.sheetNames.motivosSalida);
+  if (!sheet) {
+    throw new Error('No se encontro la hoja MOTIVOS SALIDA.');
+  }
+
+  return sheet.getDataRange().getValues()
+    .slice(1)
+    .map((row) => String(row[0] || '').trim())
+    .filter(Boolean);
+}
+
+function findProductByCode_(rawCode) {
+  const normalizedCode = normalizeText_(rawCode);
+  return readProducts_().find((item) => normalizeText_(item.codigo) === normalizedCode) || null;
+}
+
+function resolveSheetName_(rawName) {
+  const normalized = normalizeText_(rawName);
+  const map = {
+    [normalizeText_(CONFIG.sheetNames.inventarioInicial)]: CONFIG.sheetNames.inventarioInicial,
+    [normalizeText_(CONFIG.sheetNames.recibido)]: CONFIG.sheetNames.recibido,
+    [normalizeText_(CONFIG.sheetNames.salidas)]: CONFIG.sheetNames.salidas,
+    [normalizeText_(CONFIG.sheetNames.inventarioCierre)]: CONFIG.sheetNames.inventarioCierre,
+  };
+  if (!map[normalized]) {
+    throw new Error('Hoja destino no valida: ' + rawName);
+  }
+  return map[normalized];
+}
+
+function resolveMotivoSalida_(rawValue) {
+  const motivo = String(rawValue || '').trim();
+  if (!motivo) {
+    throw new Error('Para SALIDAS debes indicar el motivo de salida.');
+  }
+
+  const validMotivos = readMotivosSalida_().map(normalizeText_);
+  if (!validMotivos.includes(normalizeText_(motivo))) {
+    throw new Error('El motivo de salida no existe en la hoja MOTIVOS SALIDA.');
+  }
+
+  return motivo;
+}
+
+function getOrCreateSheet_(sheetName) {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  return sheet;
+}
+
+function ensureHeaders_(sheet, headers) {
+  const current = sheet.getRange(1, 1, 1, headers.length).getValues()[0].map((value) => String(value || '').trim().toUpperCase());
+  const expected = headers.map((value) => String(value || '').trim().toUpperCase());
+  const same = expected.every((value, index) => value === current[index]);
+  if (!same) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.setFrozenRows(1);
+  }
+}
+
+function validateRequired_(payload, fields) {
+  fields.forEach((field) => {
+    const value = payload[field];
+    if (value === undefined || value === null || String(value).trim() === '') {
+      throw new Error('El campo ' + field + ' es obligatorio.');
+    }
+  });
+}
+
+function parseBody_(e) {
+  if (!e || !e.postData || !e.postData.contents) {
+    throw new Error('Cuerpo POST vacio.');
+  }
+
+  const raw = String(e.postData.contents).trim();
+  if (!raw) {
+    throw new Error('Cuerpo POST vacio.');
+  }
+
+  if (raw.charAt(0) !== '{' && raw.indexOf('=') !== -1) {
+    const params = parseFormUrlEncoded_(raw);
+    if (params.payload) {
+      return {
+        action: params.action || '',
+        payload: JSON.parse(String(params.payload)),
+      };
+    }
+    return params;
+  }
+
+  return JSON.parse(raw);
+}
+
+function parseFormUrlEncoded_(raw) {
+  const result = {};
+  raw.split('&').forEach((part) => {
+    if (!part) return;
+    const pair = part.split('=');
+    const key = decodeURIComponent((pair[0] || '').replace(/\+/g, ' ')).trim();
+    const value = decodeURIComponent((pair.slice(1).join('=') || '').replace(/\+/g, ' '));
+    if (key) {
+      result[key] = value;
+    }
+  });
+  return result;
+}
+
+function getSpreadsheet_() {
+  return SpreadsheetApp.openById(CONFIG.spreadsheetId);
+}
+
+function jsonResponse_(success, data, message) {
+  return ContentService.createTextOutput(JSON.stringify({ success, data, message })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function normalizeText_(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function normalizeError_(error) {
+  return String(error && error.message ? error.message : error || 'Error interno de Apps Script.');
+}

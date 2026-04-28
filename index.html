@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gestion de Tienda</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script>
+      window.APPS_SCRIPT_URL = '';
+    </script>
+  </head>
+  <body>
+    <div class="brand-corner" aria-hidden="true">
+      <img src="logopandetata.png" alt="" class="brand-corner__logo" />
+    </div>
+
+    <header class="topbar">
+      <p class="eyebrow">Panel de tienda</p>
+      <h1>Gestion de Tienda</h1>
+      <p class="topbar__subtitle">Selecciona el movimiento y registra la operacion con el catalogo sincronizado desde Google Sheets.</p>
+    </header>
+
+    <main class="main">
+      <div id="env-warning" class="alert alert--warn hidden">
+        Configura la URL del Apps Script en config.js para habilitar el guardado en Google Sheets.
+      </div>
+
+      <section class="card">
+        <div class="module-buttons">
+          <button class="module-btn active" id="btn-inicial" type="button">Inventario Inicial</button>
+          <button class="module-btn" id="btn-recibido" type="button">Recibido</button>
+          <button class="module-btn" id="btn-salidas" type="button">Salidas</button>
+          <button class="module-btn" id="btn-cierre" type="button">Inventario Cierre</button>
+        </div>
+
+        <form id="inventory-form" class="store-form">
+          <div class="form-grid">
+            <label>
+              <span>Fecha</span>
+              <input type="date" name="fecha" required />
+            </label>
+
+            <label>
+              <span>Producto</span>
+              <input id="producto" name="producto" list="listaProductos" placeholder="Busca por codigo o nombre" autocomplete="off" required />
+              <datalist id="listaProductos"></datalist>
+            </label>
+
+            <label>
+              <span>Sede</span>
+              <input type="text" name="sede" placeholder="Ej: Av. Victoria" required />
+            </label>
+
+            <label>
+              <span>Responsable</span>
+              <input type="text" name="responsable" placeholder="Nombre del responsable" required />
+            </label>
+
+            <label>
+              <span>Cantidad</span>
+              <input type="number" name="cantidad" min="1" step="1" placeholder="0" required />
+            </label>
+
+            <label>
+              <span>Observaciones (Opcional)</span>
+              <input type="text" name="observaciones" placeholder="Ej: Lote de la mañana" />
+            </label>
+          </div>
+
+          <div id="contenedor-motivo" class="motivo-box hidden">
+            <label>
+              <span>Motivo de salida</span>
+              <select id="motivo" name="motivo">
+                <option value="" disabled selected>Seleccione un motivo...</option>
+              </select>
+            </label>
+            <input type="text" id="motivo-otro" name="motivo-otro" placeholder="Escriba el motivo aquí..." class="hidden motivo-otro" />
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn--primary">Guardar Registro</button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="standby-overlay" class="standby-overlay hidden" aria-live="assertive" aria-busy="true" role="status">
+      <div class="standby-panel">
+        <div class="standby-spinner" aria-hidden="true"></div>
+        <p id="standby-message">Cargando...</p>
+        <small>No cierres esta pagina hasta que termine el envio.</small>
+      </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
