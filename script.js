@@ -35,7 +35,12 @@ const elements = {
     'btn-recibido': document.getElementById('btn-recibido'),
     'btn-salidas': document.getElementById('btn-salidas'),
     'btn-cierre': document.getElementById('btn-cierre'),
+    'btn-agotado': document.getElementById('btn-agotado'),
   },
+  formInventario: document.getElementById('form-inventario'),
+  formAgotado: document.getElementById('form-agotado'),
+  agotadoFecha: document.getElementById('agotado-fecha'),
+  agotadoProducto: document.getElementById('agotado-producto'),
 };
 
 elements.submitButton = elements.form ? elements.form.querySelector('button[type="submit"]') : null;
@@ -51,6 +56,14 @@ function init() {
   toggleEnvWarning(!APPS_SCRIPT_URL);
   fetchCatalogs();
   updateModuleTitle();
+  // Si el módulo inicial es Agotado, ocultar items y motivo
+  if (state.activeModule === 'Agotado') {
+    const itemsCard = document.querySelector('.items-card');
+    if (itemsCard) itemsCard.classList.add('hidden');
+    hideMotivoBox();
+    if (elements.formInventario) elements.formInventario.classList.add('hidden');
+    if (elements.formAgotado) elements.formAgotado.classList.remove('hidden');
+  }
 }
 
 function setupModuleButtons() {
@@ -62,6 +75,7 @@ function setupModuleButtons() {
         'btn-recibido': 'Recibido',
         'btn-salidas': 'Salidas',
         'btn-cierre': 'Inventario Cierre',
+        'btn-agotado': 'Agotado',
       }[buttonId];
 
       state.activeModule = moduleName;
@@ -69,6 +83,13 @@ function setupModuleButtons() {
       updateModuleTitle();
       clearItems();
 
+      // Mostrar/ocultar formularios según módulo
+      if (elements.formInventario) elements.formInventario.classList.toggle('hidden', moduleName === 'Agotado');
+      if (elements.formAgotado) elements.formAgotado.classList.toggle('hidden', moduleName !== 'Agotado');
+
+      // Mostrar/ocultar items y motivo solo si no es Agotado
+      const itemsCard = document.querySelector('.items-card');
+      if (itemsCard) itemsCard.classList.toggle('hidden', moduleName === 'Agotado');
       if (moduleName === 'Salidas') {
         showMotivoBox();
       } else {
@@ -174,6 +195,43 @@ function setupForm() {
       return;
     }
 
+    // Lógica para AGOTADO
+    if (state.activeModule === 'Agotado') {
+      const productoRaw = elements.agotadoProducto?.value || '';
+      const parsedProduct = resolveProduct(productoRaw);
+      if (!parsedProduct) {
+        showToast('Selecciona un producto válido del catálogo.', 'error');
+        return;
+      }
+      const payload = {
+        hoja_destino: mapSheetName(state.activeModule),
+        tipo_movimiento: state.activeModule,
+        codigo: parsedProduct.codigo,
+        producto: parsedProduct.producto,
+        fecha: elements.agotadoFecha?.value || '',
+      };
+
+      toggleLoading(true, 'Guardando...');
+      showStandby('Cargando...');
+      try {
+        const result = await postData(payload);
+        if (!result || result.success === false) {
+          throw new Error(result?.message || 'No se pudo guardar el registro.');
+        }
+        showToast('Registro guardado correctamente.', 'success');
+        elements.form.reset();
+        if (elements.agotadoProducto) elements.agotadoProducto.value = '';
+        startDateClock();
+      } catch (error) {
+        showToast(error.message || 'No se pudo guardar el registro.', 'error');
+      } finally {
+        hideStandby();
+        toggleLoading(false, 'Guardar Registro');
+      }
+      return;
+    }
+
+    // Lógica para los otros módulos
     if (!state.items.length) {
       showToast('Agrega al menos un producto al registro.', 'error');
       return;
@@ -239,6 +297,20 @@ function updateModuleTitle() {
   const el = elements.moduleTitle;
   if (!el) return;
   el.textContent = `Módulo: ${state.activeModule || 'Inventario Inicial'}`;
+  // Actualizar fecha en formulario de Agotado
+  if (elements.agotadoFecha) {
+    elements.agotadoFecha.value = getCurrentDateTimeString();
+  }
+}
+
+function getCurrentDateTimeString() {
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = String(now.getFullYear()).slice(-2);
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
 }
 
 function mapSheetName(moduleName) {
@@ -247,6 +319,7 @@ function mapSheetName(moduleName) {
     'Recibido': 'RECIBIDO',
     'Salidas': 'SALIDAS',
     'Inventario Cierre': 'INVENTARIO CIERRE',
+    'Agotado': 'AGOTADO',
   }[moduleName] || 'INVENTARIO INICIAL';
 }
 

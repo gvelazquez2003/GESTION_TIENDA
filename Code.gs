@@ -6,12 +6,14 @@ const CONFIG = {
     recibido: 'RECIBIDO',
     salidas: 'SALIDAS',
     inventarioCierre: 'INVENTARIO CIERRE',
+    agotado: 'AGOTADO',
     productos: 'PRODUCTOS',
     motivosSalida: 'MOTIVOS SALIDA',
   },
   headers: {
     base: ['FECHA', 'CODIGO', 'PRODUCTO', 'CANTIDAD', 'SEDE', 'RESPONSABLE', 'OBSERVACIONES'],
     salidas: ['FECHA', 'CODIGO', 'PRODUCTO', 'CANTIDAD', 'SEDE', 'RESPONSABLE', 'OBSERVACIONES', 'MOTIVO SALIDA'],
+    agotado: ['FECHA', 'CODIGO', 'PRODUCTO'],
   },
 };
 
@@ -54,45 +56,59 @@ function doPost(e) {
 
 function guardarRegistro_(payload) {
   const data = payload || {};
-  validateRequired_(data, ['hoja_destino', 'sede', 'responsable']);
-
   const sheetName = resolveSheetName_(data.hoja_destino);
   const sheet = getOrCreateSheet_(sheetName);
-  const headers = sheetName === CONFIG.sheetNames.salidas ? CONFIG.headers.salidas : CONFIG.headers.base;
+  let headers = CONFIG.headers.base;
+  if (sheetName === CONFIG.sheetNames.salidas) headers = CONFIG.headers.salidas;
+  if (sheetName === CONFIG.sheetNames.agotado) headers = CONFIG.headers.agotado;
   ensureHeaders_(sheet, headers);
 
+  // Lógica especial para AGOTADO
+  if (sheetName === CONFIG.sheetNames.agotado) {
+    // Validar campos requeridos
+    if (!data.codigo || !data.producto) {
+      throw new Error('Debes indicar el código y nombre del producto.');
+    }
+    // Usar fecha proporcionada o actual
+    const fecha = data.fecha ? String(data.fecha).trim() : buildTimestamp_();
+    const row = [fecha, String(data.codigo).trim(), String(data.producto).trim()];
+    const startRow = sheet.getLastRow() + 1;
+    sheet.getRange(startRow, 1, 1, row.length).setValues([row]);
+    return {
+      sheet: sheetName,
+      rowInserted: startRow,
+      rowsInserted: 1,
+      values: [row],
+    };
+  }
+
+  // Lógica original para los demás módulos
+  validateRequired_(data, ['hoja_destino', 'sede', 'responsable']);
   const items = normalizeItems_(data);
   if (!items.length) {
     throw new Error('Debes incluir al menos un producto con cantidad.');
   }
-
   const fecha = buildTimestamp_();
   const sede = String(data.sede || '').trim();
   const responsable = String(data.responsable || '').trim();
   const observaciones = String(data.observaciones || '').trim();
-
   const motivo = sheetName === CONFIG.sheetNames.salidas ? resolveMotivoSalida_(data.motivo_salida) : '';
   const rows = items.map((item, index) => {
     const catalogProduct = findProductByCode_(item.codigo);
     if (!catalogProduct) {
       throw new Error('El codigo del item ' + (index + 1) + ' no existe en la hoja PRODUCTOS.');
     }
-
     const cantidad = Number(item.cantidad);
     if (!Number.isInteger(cantidad) || cantidad <= 0) {
       throw new Error('La cantidad del item ' + (index + 1) + ' debe ser un numero entero mayor a cero.');
     }
-
     if (sheetName === CONFIG.sheetNames.salidas) {
       return [fecha, catalogProduct.codigo, catalogProduct.producto, cantidad, sede, responsable, observaciones, motivo];
     }
-
     return [fecha, catalogProduct.codigo, catalogProduct.producto, cantidad, sede, responsable, observaciones];
   });
-
   const startRow = sheet.getLastRow() + 1;
   sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
-
   return {
     sheet: sheetName,
     rowInserted: startRow + rows.length - 1,
@@ -168,6 +184,7 @@ function resolveSheetName_(rawName) {
     [normalizeText_(CONFIG.sheetNames.recibido)]: CONFIG.sheetNames.recibido,
     [normalizeText_(CONFIG.sheetNames.salidas)]: CONFIG.sheetNames.salidas,
     [normalizeText_(CONFIG.sheetNames.inventarioCierre)]: CONFIG.sheetNames.inventarioCierre,
+    [normalizeText_(CONFIG.sheetNames.agotado)]: CONFIG.sheetNames.agotado,
   };
   if (!map[normalized]) {
     throw new Error('Hoja destino no valida: ' + rawName);
