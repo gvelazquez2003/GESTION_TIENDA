@@ -56,14 +56,6 @@ function init() {
   toggleEnvWarning(!APPS_SCRIPT_URL);
   fetchCatalogs();
   updateModuleTitle();
-  // Si el módulo inicial es Agotado, ocultar items y motivo
-  if (state.activeModule === 'Agotado') {
-    const itemsCard = document.querySelector('.items-card');
-    if (itemsCard) itemsCard.classList.add('hidden');
-    hideMotivoBox();
-    if (elements.formInventario) elements.formInventario.classList.add('hidden');
-    if (elements.formAgotado) elements.formAgotado.classList.remove('hidden');
-  }
 }
 
 function setupModuleButtons() {
