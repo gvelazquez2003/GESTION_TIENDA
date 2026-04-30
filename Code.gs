@@ -56,6 +56,24 @@ function doPost(e) {
 
 function guardarRegistro_(payload) {
   const data = payload || {};
+
+  // --- INICIO DEL PARCHE DE COMPATIBILIDAD ---
+  // 1. Traducir el nombre del módulo
+  if (!data.hoja_destino && data.tipo_movimiento) {
+    data.hoja_destino = data.tipo_movimiento;
+  }
+  // 2. Traducir el motivo de salida
+  if (!data.motivo_salida && data.motivo) {
+    data.motivo_salida = data.motivo;
+  }
+  // 3. Separar el código y el nombre del producto automáticamente
+  if (data.producto && !data.codigo && data.producto.indexOf(" ") > -1) {
+    const espacioIndex = data.producto.indexOf(" ");
+    data.codigo = data.producto.substring(0, espacioIndex).trim();
+    data.producto = data.producto.substring(espacioIndex + 1).trim();
+  }
+  // --- FIN DEL PARCHE ---
+
   const sheetName = resolveSheetName_(data.hoja_destino);
   const sheet = getOrCreateSheet_(sheetName);
   let headers = CONFIG.headers.base;
