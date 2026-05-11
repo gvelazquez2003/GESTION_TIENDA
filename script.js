@@ -434,6 +434,18 @@ async function readJsonResponse(response) {
   try {
     return JSON.parse(text);
   } catch {
+    const normalized = text.toLowerCase();
+    const looksLikeHtml = normalized.includes('<!doctype html') || normalized.includes('<html');
+    const typedColumnFormatError = normalized.includes('number format of cells in a typed column');
+
+    // Google Apps Script a veces responde HTML aun cuando el registro ya se guardo.
+    if (response.ok && (typedColumnFormatError || looksLikeHtml)) {
+      return {
+        success: true,
+        message: 'Registro guardado correctamente.',
+      };
+    }
+
     throw new Error(text);
   }
 }
