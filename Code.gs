@@ -127,7 +127,7 @@ function guardarRegistro_(payload) {
   });
   const startRow = sheet.getLastRow() + 1;
   sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(startRow, 1, rows.length, 1).setNumberFormat('dd/MM/yyyy HH:mm');
+  applyFechaFormat_(sheet, startRow, rows.length);
   return {
     sheet: sheetName,
     rowInserted: startRow + rows.length - 1,
@@ -314,4 +314,15 @@ function normalizeError_(error) {
 
 function buildTimestamp_() {
   return new Date();
+}
+
+function applyFechaFormat_(sheet, startRow, rowCount) {
+  if (!sheet || !startRow || !rowCount) return;
+  try {
+    sheet.getRange(startRow, 1, rowCount, 1).setNumberFormat('dd/MM/yyyy HH:mm');
+  } catch (error) {
+    // Some Sheets have typed columns that reject setNumberFormat.
+    // Ignore to avoid blocking record writes.
+    Logger.log('No se pudo aplicar formato FECHA: ' + error);
+  }
 }
