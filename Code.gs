@@ -127,6 +127,7 @@ function guardarRegistro_(payload) {
   });
   const startRow = sheet.getLastRow() + 1;
   sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
+  sheet.getRange(startRow, 1, rows.length, 1).setNumberFormat('dd/MM/yyyy HH:mm');
   return {
     sheet: sheetName,
     rowInserted: startRow + rows.length - 1,
@@ -312,5 +313,5 @@ function normalizeError_(error) {
 }
 
 function buildTimestamp_() {
-  return Utilities.formatDate(new Date(), CONFIG.timeZone, 'dd/MM/yy HH:mm');
+  return new Date();
 }
