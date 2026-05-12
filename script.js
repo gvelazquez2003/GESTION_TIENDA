@@ -19,10 +19,13 @@ const elements = {
   productosList: document.getElementById('listaProductos'),
   lineProducto: document.getElementById('line-producto'),
   lineCantidad: document.getElementById('line-cantidad'),
+  lineFechaElaboracion: document.getElementById('line-fecha-elaboracion'),
+  lineFechaElaboracionField: document.getElementById('line-fecha-elaboracion-field'),
   addItemBtn: document.getElementById('add-item'),
   itemsBody: document.getElementById('items-body'),
   itemsWrap: document.getElementById('items-wrap'),
   itemsEmpty: document.getElementById('items-empty'),
+  itemsFechaElaboracionHeader: document.getElementById('items-fecha-elaboracion-header'),
   motivoBox: document.getElementById('contenedor-motivo'),
   motivoSelect: document.getElementById('motivo'),
   motivoOtroInput: document.getElementById('motivo-otro'),
@@ -56,6 +59,7 @@ function init() {
   toggleEnvWarning(!APPS_SCRIPT_URL);
   fetchCatalogs();
   updateModuleTitle();
+  updateFechaElaboracionVisibility();
 }
 
 function setupModuleButtons() {
@@ -74,6 +78,7 @@ function setupModuleButtons() {
       setActiveButton(buttonId);
       updateModuleTitle();
       clearItems();
+      updateFechaElaboracionVisibility();
 
       // Mostrar/ocultar formularios según módulo
       if (elements.formInventario) elements.formInventario.classList.toggle('hidden', moduleName === 'Agotado');
@@ -136,20 +141,31 @@ function addItem() {
     return;
   }
 
+  const requiresFechaElaboracion = isFechaElaboracionRequiredModule(state.activeModule);
+  const fechaElaboracion = String(elements.lineFechaElaboracion?.value || '').trim();
+  if (requiresFechaElaboracion && !fechaElaboracion) {
+    showToast('La fecha de elaboracion es obligatoria.', 'error');
+    return;
+  }
+
   state.items.push({
     id: createLineItemId(),
     codigo: parsedProduct.codigo,
     producto: parsedProduct.producto,
     cantidad: quantity,
+    fechaElaboracion: requiresFechaElaboracion ? fechaElaboracion : '',
   });
 
   renderItems();
   if (elements.lineProducto) elements.lineProducto.value = '';
   if (elements.lineCantidad) elements.lineCantidad.value = '';
+  if (elements.lineFechaElaboracion) elements.lineFechaElaboracion.value = '';
 }
 
 function renderItems() {
   if (!elements.itemsBody || !elements.itemsWrap || !elements.itemsEmpty) return;
+  const showFechaElaboracion = isFechaElaboracionRequiredModule(state.activeModule);
+  elements.itemsFechaElaboracionHeader?.classList.toggle('hidden', !showFechaElaboracion);
 
   if (!state.items.length) {
     elements.itemsBody.innerHTML = '';
@@ -163,6 +179,7 @@ function renderItems() {
       <td>${escapeHtml(item.codigo)}</td>
       <td>${escapeHtml(item.producto)}</td>
       <td>${escapeHtml(item.cantidad)}</td>
+      ${showFechaElaboracion ? `<td>${escapeHtml(formatDateForDisplay(item.fechaElaboracion))}</td>` : ''}
       <td><button type="button" class="btn btn--small" data-remove-item="${escapeHtml(item.id)}">Quitar</button></td>
     </tr>
   `).join('');
@@ -246,6 +263,7 @@ function setupForm() {
       items: state.items.map((item) => ({
         codigo: item.codigo,
         cantidad: item.cantidad,
+        fecha_elaboracion: item.fechaElaboracion,
       })),
     };
 
@@ -293,6 +311,27 @@ function updateModuleTitle() {
   if (elements.agotadoFecha) {
     elements.agotadoFecha.value = getCurrentDateTimeString();
   }
+}
+
+function updateFechaElaboracionVisibility() {
+  const required = isFechaElaboracionRequiredModule(state.activeModule);
+  elements.lineFechaElaboracionField?.classList.toggle('hidden', !required);
+  elements.itemsFechaElaboracionHeader?.classList.toggle('hidden', !required);
+  if (elements.lineFechaElaboracion) {
+    elements.lineFechaElaboracion.required = required;
+    if (!required) elements.lineFechaElaboracion.value = '';
+  }
+}
+
+function isFechaElaboracionRequiredModule(moduleName) {
+  return moduleName === 'Inventario Inicial' || moduleName === 'Inventario Cierre';
+}
+
+function formatDateForDisplay(rawValue) {
+  const value = String(rawValue || '').trim();
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return value;
+  return `${match[3]}/${match[2]}/${match[1].slice(-2)}`;
 }
 
 function getCurrentDateTimeString() {

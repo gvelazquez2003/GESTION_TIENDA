@@ -230,7 +230,7 @@ select:focus {
 
 .line-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr auto;
+  grid-template-columns: minmax(240px, 2fr) minmax(130px, 0.8fr) minmax(180px, 1fr) auto;
   gap: 0.85rem;
   align-items: end;
 }
@@ -249,7 +249,7 @@ select:focus {
 .items-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 560px;
+  min-width: 720px;
 }
 
 .items-table th,

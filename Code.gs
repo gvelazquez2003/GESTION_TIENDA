@@ -12,6 +12,7 @@ const CONFIG = {
   },
   headers: {
     base: ['FECHA', 'CODIGO', 'PRODUCTO', 'CANTIDAD', 'SEDE', 'RESPONSABLE', 'OBSERVACIONES'],
+    conFechaElaboracion: ['FECHA', 'CODIGO', 'PRODUCTO', 'CANTIDAD', 'FECHA DE ELABORACION', 'SEDE', 'RESPONSABLE', 'OBSERVACIONES'],
     salidas: ['FECHA', 'CODIGO', 'PRODUCTO', 'CANTIDAD', 'SEDE', 'RESPONSABLE', 'OBSERVACIONES', 'MOTIVO SALIDA'],
     agotado: ['FECHA', 'CODIGO', 'PRODUCTO'],
   },
@@ -77,6 +78,7 @@ function guardarRegistro_(payload) {
   const sheetName = resolveSheetName_(data.hoja_destino);
   const sheet = getOrCreateSheet_(sheetName);
   let headers = CONFIG.headers.base;
+  if (requiresFechaElaboracion_(sheetName)) headers = CONFIG.headers.conFechaElaboracion;
   if (sheetName === CONFIG.sheetNames.salidas) headers = CONFIG.headers.salidas;
   if (sheetName === CONFIG.sheetNames.agotado) headers = CONFIG.headers.agotado;
   ensureHeaders_(sheet, headers);
@@ -120,6 +122,10 @@ function guardarRegistro_(payload) {
     if (!Number.isInteger(cantidad) || cantidad <= 0) {
       throw new Error('La cantidad del item ' + (index + 1) + ' debe ser un numero entero mayor a cero.');
     }
+    if (requiresFechaElaboracion_(sheetName)) {
+      const fechaElaboracion = parseFechaElaboracion_(item.fechaElaboracion, index);
+      return [fecha, catalogProduct.codigo, catalogProduct.producto, cantidad, fechaElaboracion, sede, responsable, observaciones];
+    }
     if (sheetName === CONFIG.sheetNames.salidas) {
       return [fecha, catalogProduct.codigo, catalogProduct.producto, cantidad, sede, responsable, observaciones, motivo];
     }
@@ -128,6 +134,9 @@ function guardarRegistro_(payload) {
   const startRow = sheet.getLastRow() + 1;
   sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
   applyFechaFormat_(sheet, startRow, rows.length);
+  if (requiresFechaElaboracion_(sheetName)) {
+    applyFechaElaboracionFormat_(sheet, startRow, rows.length);
+  }
   return {
     sheet: sheetName,
     rowInserted: startRow + rows.length - 1,
@@ -183,6 +192,7 @@ function normalizeItems_(data) {
     return data.items.map((item) => ({
       codigo: String(item?.codigo || '').trim(),
       cantidad: item?.cantidad,
+      fechaElaboracion: item?.fecha_elaboracion || item?.fechaElaboracion || '',
     })).filter((item) => item.codigo !== '');
   }
 
@@ -190,6 +200,7 @@ function normalizeItems_(data) {
     return [{
       codigo: String(data.codigo || '').trim(),
       cantidad: data.cantidad,
+      fechaElaboracion: data.fecha_elaboracion || data.fechaElaboracion || '',
     }];
   }
 
@@ -225,6 +236,29 @@ function resolveMotivoSalida_(rawValue) {
   return motivo;
 }
 
+function requiresFechaElaboracion_(sheetName) {
+  return sheetName === CONFIG.sheetNames.inventarioInicial || sheetName === CONFIG.sheetNames.inventarioCierre;
+}
+
+function parseFechaElaboracion_(rawValue, index) {
+  const value = String(rawValue || '').trim();
+  if (!value) {
+    throw new Error('La fecha de elaboracion del item ' + (index + 1) + ' es obligatoria.');
+  }
+
+  let match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
+
+  match = value.match(/^(\d{2})\/(\d{2})\/(\d{2})$/);
+  if (match) {
+    return new Date(2000 + Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+  }
+
+  throw new Error('La fecha de elaboracion del item ' + (index + 1) + ' debe tener formato DD/MM/AA.');
+}
+
 function getOrCreateSheet_(sheetName) {
   const ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(sheetName);
@@ -235,13 +269,26 @@ function getOrCreateSheet_(sheetName) {
 }
 
 function ensureHeaders_(sheet, headers) {
-  const current = sheet.getRange(1, 1, 1, headers.length).getValues()[0].map((value) => String(value || '').trim().toUpperCase());
   const expected = headers.map((value) => String(value || '').trim().toUpperCase());
-  const same = expected.every((value, index) => value === current[index]);
-  if (!same) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    sheet.setFrozenRows(1);
-  }
+  const currentLastColumn = Math.max(sheet.getLastColumn(), headers.length);
+  let current = sheet.getRange(1, 1, 1, currentLastColumn).getValues()[0].map((value) => String(value || '').trim().toUpperCase());
+
+  headers.forEach((header, expectedIndex) => {
+    const expectedHeader = expected[expectedIndex];
+    const currentIndex = current.indexOf(expectedHeader);
+    if (currentIndex === expectedIndex) return;
+
+    if (currentIndex === -1) {
+      sheet.insertColumnBefore(expectedIndex + 1);
+    } else {
+      sheet.moveColumns(sheet.getRange(1, currentIndex + 1, Math.max(sheet.getMaxRows(), 1), 1), expectedIndex + 1);
+    }
+
+    current = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), headers.length)).getValues()[0].map((value) => String(value || '').trim().toUpperCase());
+  });
+
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.setFrozenRows(1);
 }
 
 function validateRequired_(payload, fields) {
@@ -324,5 +371,14 @@ function applyFechaFormat_(sheet, startRow, rowCount) {
     // Some Sheets have typed columns that reject setNumberFormat.
     // Ignore to avoid blocking record writes.
     Logger.log('No se pudo aplicar formato FECHA: ' + error);
+  }
+}
+
+function applyFechaElaboracionFormat_(sheet, startRow, rowCount) {
+  if (!sheet || !startRow || !rowCount) return;
+  try {
+    sheet.getRange(startRow, 5, rowCount, 1).setNumberFormat('dd/MM/yy');
+  } catch (error) {
+    Logger.log('No se pudo aplicar formato FECHA DE ELABORACION: ' + error);
   }
 }
